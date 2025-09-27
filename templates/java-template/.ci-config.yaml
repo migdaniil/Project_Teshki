@@ -1,1 +1,38 @@
+# CI/CD Configuration for Java Project
+project:
+  name: "java-application"     # ⚠️ Разработчик поменяет на имя своего проекта
+  language: "java"
+  version: "17"                # Можно изменить на 11, 21 и т.д.
+  build_tool: "maven"
 
+# Стандартные пути для Maven проекта - обычно не требуют изменений
+paths:
+  source: "src/main/java"
+  tests: "src/test/java"
+  requirements: "pom.xml"
+  output: "target/"
+
+# Стандартные команды Maven
+commands:
+  install: "mvn clean compile"
+  test: "mvn test"
+  package: "mvn package -DskipTests"
+  lint: "mvn checkstyle:check"
+
+# Настройки Docker
+docker:
+  enabled: true
+  dockerfile: "Dockerfile"     # ⚠️ Разработчик переименует Dockerfile.java -> Dockerfile
+  context: "."
+  image_name: "java-app"       # ⚠️ Поменяет на имя своего приложения
+
+# Настройки деплоя (отключено по умолчанию)
+deploy:
+  enabled: false
+  target: "kubernetes"
+  environments: ["dev"]
+
+# Quality Gates
+quality:
+  test_coverage: 80
+  security_scan: true
