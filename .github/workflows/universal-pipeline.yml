@@ -1,1 +1,215 @@
+name: Universal CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate-config:
+    name: Validate CI Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      config-valid: ${{ steps.validate.outputs.valid }}
+      config-data: ${{ steps.validate.outputs.config }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate .ci-config.yaml
+        id: validate
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const yaml = require('js-yaml');
+            
+            try {
+              const configFile = fs.readFileSync('.ci-config.yaml', 'utf8');
+              const config = yaml.load(configFile);
+              
+              // Basic validation
+              if (!config.project || !config.project.language) {
+                core.setFailed('Invalid .ci-config.yaml: missing project.language');
+                return {valid: false};
+              }
+              
+              // Validate language support
+              const supportedLanguages = ['java', 'python', 'javascript', 'go'];
+              if (!supportedLanguages.includes(config.project.language)) {
+                core.setFailed(`Unsupported language: ${config.project.language}`);
+                return {valid: false};
+              }
+              
+              return {valid: true, config: config};
+            } catch (error) {
+              core.setFailed('Error reading .ci-config.yaml: ' + error.message);
+              return {valid: false};
+            }
+
+  setup-environment:
+    name: Setup Build Environment
+    needs: validate-config
+    if: needs.validate-config.outputs.config-valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load configuration
+        id: config
+        run: |
+          CONFIG=$(cat .ci-config.yaml | python3 -c "
+          import sys, yaml, json
+          print(json.dumps(yaml.safe_load(sys.stdin)))
+          ")
+          echo "config=$CONFIG" >> $GITHUB_OUTPUT
+
+      - name: Setup Java
+        if: fromJson(steps.config.outputs.config).project.language == 'java'
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ fromJson(steps.config.outputs.config).project.version || '11' }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Setup Node.js
+        if: fromJson(steps.config.outputs.config).project.language == 'javascript'
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ fromJson(steps.config.outputs.config).project.version || '16' }}
+          cache: 'npm'
+
+      - name: Setup Python
+        if: fromJson(steps.config.outputs.config).project.language == 'python'
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ fromJson(steps.config.outputs.config).project.version || '3.9' }}
+          cache: 'pip'
+
+      - name: Setup Go
+        if: fromJson(steps.config.outputs.config).project.language == 'go'
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ fromJson(steps.config.outputs.config).project.version || '1.19' }}
+
+  build-and-test:
+    name: Build and Test
+    needs: [validate-config, setup-environment]
+    if: needs.validate-config.outputs.config-valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load configuration
+        id: config
+        run: |
+          CONFIG=$(cat .ci-config.yaml | python3 -c "
+          import sys, yaml, json
+          print(json.dumps(yaml.safe_load(sys.stdin)))
+          ")
+          echo "config=$CONFIG" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        run: |
+          config='${{ steps.config.outputs.config }}'
+          command=$(echo $config | python3 -c "
+          import sys, json
+          config = json.loads(sys.stdin.read())
+          print(config.get('commands', {}).get('install', ''))
+          ")
+          
+          # Fallback to default commands if custom not specified
+          if [ -z "$command" ]; then
+            language=$(echo $config | python3 -c "import sys, json; print(json.loads(sys.stdin.read())['project']['language'])")
+            case $language in
+              "java") command="mvn clean compile" ;;
+              "python") command="pip install -r requirements.txt" ;;
+              "javascript") command="npm ci" ;;
+              "go") command="go mod download" ;;
+            esac
+          fi
+          
+          echo "Running: $command"
+          eval $command
+
+      - name: Run tests
+        run: |
+          config='${{ steps.config.outputs.config }}'
+          command=$(echo $config | python3 -c "
+          import sys, json
+          config = json.loads(sys.stdin.read())
+          print(config.get('commands', {}).get('test', ''))
+          ")
+          
+          if [ -z "$command" ]; then
+            language=$(echo $config | python3 -c "import sys, json; print(json.loads(sys.stdin.read())['project']['language'])")
+            case $language in
+              "java") command="mvn test" ;;
+              "python") command="pytest" ;;
+              "javascript") command="npm test" ;;
+              "go") command="go test ./..." ;;
+            esac
+          fi
+          
+          echo "Running tests: $command"
+          eval $command
+
+  security-scan:
+    name: Security Scan
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  build-docker:
+    name: Build Docker Image
+    needs: [build-and-test, security-scan]
+    if: |
+      needs.validate-config.outputs.config-valid == 'true' && 
+      github.ref == 'refs/heads/main' &&
+      fromJson(needs.setup-environment.outputs.config).docker.enabled != false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load configuration
+        id: config
+        run: |
+          CONFIG=$(cat .ci-config.yaml | python3 -c "
+          import sys, yaml, json
+          print(json.dumps(yaml.safe_load(sys.stdin)))
+          ")
+          echo "config=$CONFIG" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ${{ fromJson(steps.config.outputs.config).docker.context || '.' }}
+          file: ${{ fromJson(steps.config.outputs.config).docker.dockerfile || 'Dockerfile' }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ fromJson(steps.config.outputs.config).docker.image_name || env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ fromJson(steps.config.outputs.config).docker.image_name || env.IMAGE_NAME }}:${{ github.sha }}
 
