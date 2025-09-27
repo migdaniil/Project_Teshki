@@ -1,1 +1,164 @@
+# Security Rules Configuration
+version: "1.1.0"
+effective_date: "2024-01-15"
 
+# Общие настройки безопасности
+global:
+  security_level: "high"  # low, medium, high, critical
+  auto_fix: false  # Автоматическое применение фиксов
+  fail_on_critical: true
+
+# Сканеры безопасности
+scanners:
+  dependency_scanning:
+    enabled: true
+    tools:
+      - name: "trivy"
+        type: "vulnerability"
+        args: "fs --security-checks vuln,config ."
+      - name: "snyk"
+        type: "vulnerability"
+        args: "test --all-projects"
+      - name: "owasp_dependency_check"
+        type: "vulnerability"
+        args: "--project myapp --scan ."
+
+  code_scanning:
+    enabled: true
+    tools:
+      - name: "gitleaks"
+        type: "secrets"
+        args: "detect --source . --report-format json"
+      - name: "semgrep"
+        type: "sast"
+        args: "scan --config auto ."
+      - name: "bandit"
+        type: "sast"
+        args: "-r . -f json"
+
+  container_scanning:
+    enabled: true
+    tools:
+      - name: "trivy"
+        type: "image"
+        args: "image --security-checks vuln myimage:latest"
+      - name: "docker_bench"
+        type: "configuration"
+        args: "--check"
+
+# Правила для критических уязвимостей
+vulnerability_rules:
+  critical:
+    - severity: "CRITICAL"
+      action: "block"
+      notify: ["security-team", "devops"]
+      timeframe: "immediate"
+      
+  high:
+    - severity: "HIGH"
+      action: "block"
+      notify: ["team-lead"]
+      timeframe: "72h"
+      
+  medium:
+    - severity: "MEDIUM"
+      action: "warn"
+      notify: ["developers"]
+      timeframe: "30d"
+      
+  low:
+    - severity: "LOW"
+      action: "info"
+      notify: []
+      timeframe: "90d"
+
+# Запрещенные практики
+forbidden_patterns:
+  code:
+    - pattern: "password.*=.*['\\\"].*['\\\"]"
+      description: "Hardcoded passwords"
+      severity: "HIGH"
+      
+    - pattern: "eval\\(.*\\)"
+      description: "Use of eval function"
+      severity: "MEDIUM"
+      
+    - pattern: "ssh-rsa AAAA[0-9A-Za-z+/]"
+      description: "Private keys in code"
+      severity: "CRITICAL"
+
+  dependencies:
+    - pattern: "log4j.*1\\.|log4j.*<2"
+      description: "Vulnerable Log4j versions"
+      severity: "CRITICAL"
+      
+    - pattern: "spring-core.*<5"
+      description: "Outdated Spring framework"
+      severity: "HIGH"
+
+# Правила для секретов
+secrets_management:
+  detected_secrets:
+    action: "block"
+    scanners: ["gitleaks", "trufflehog"]
+  allowed_patterns:
+    - description: "Example placeholders"
+      patterns: ["example.com", "test@example.com", "changeme"]
+  rotation_policy:
+    enabled: true
+    interval_days: 90
+
+# Docker security rules
+docker_security:
+  base_images:
+    allowed: [
+      "eclipse-temurin:*",
+      "python:*slim",
+      "node:*alpine",
+      "nginx:*alpine"
+    ]
+    forbidden: [
+      "latest",
+      "*root*",
+      "ubuntu:latest"
+    ]
+    
+  image_rules:
+    - rule: "non_root_user"
+      required: true
+    - rule: "healthcheck"
+      required: true
+    - rule: "no_sensitive_env_vars"
+      required: true
+    - rule: "read_only_root_fs"
+      recommended: true
+
+# Compliance standards
+compliance:
+  standards:
+    - name: "OWASP Top 10"
+      version: "2021"
+      enabled: true
+    - name: "PCI DSS"
+      version: "4.0"
+      enabled: false
+    - name: "GDPR"
+      enabled: true
+      
+  reporting:
+    format: ["pdf", "json"]
+    frequency: "weekly"
+    recipients: ["security-team", "compliance-office"]
+
+# Исключения для security rules
+exceptions:
+  temporary:
+    - vulnerability: "CVE-2023-12345"
+      project: "legacy-system"
+      expiry: "2024-03-01"
+      reason: "Vendor patch scheduled"
+      
+  permanent:
+    - pattern: "test-api-key"
+      projects: ["*-test", "*-staging"]
+      reason: "Test environment only"
