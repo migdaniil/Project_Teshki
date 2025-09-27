@@ -1,1 +1,28 @@
+project:
+  name: "python-application"
+  language: "python"
+  version: "3.11"
+  build_tool: "pip"
 
+paths:
+  source: "src"
+  tests: "tests"
+  requirements: "requirements.txt"
+
+commands:
+  install: "pip install -r requirements.txt"
+  test: "pytest tests/ -v --cov=src --cov-report=xml"
+  package: "python setup.py sdist"  # Если есть setup.py
+
+docker:
+  enabled: true
+  dockerfile: "Dockerfile"
+  context: "."
+  image_name: "python-app"
+
+deploy:
+  enabled: false
+
+quality:
+  test_coverage: 70
+  security_scan: true
