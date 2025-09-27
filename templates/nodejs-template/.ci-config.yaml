@@ -1,1 +1,28 @@
+project:
+  name: "nodejs-application"
+  language: "javascript"
+  version: "18"
+  build_tool: "npm"
 
+paths:
+  source: "src"
+  tests: "test"
+  requirements: "package.json"
+
+commands:
+  install: "npm ci"
+  test: "npm test"
+  package: "npm run build"  # Если есть build script
+
+docker:
+  enabled: true
+  dockerfile: "Dockerfile"
+  context: "."
+  image_name: "nodejs-app"
+
+deploy:
+  enabled: false
+
+quality:
+  test_coverage: 80
+  security_scan: true
