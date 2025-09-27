@@ -1,1 +1,21 @@
+FROM python:3.11-slim as builder
 
+WORKDIR /app
+
+# Устанавливаем зависимости
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+# Финальный образ
+FROM python:3.11-slim
+WORKDIR /app
+
+# Копируем зависимости из builder stage
+COPY --from=builder /root/.local /root/.local
+COPY src/ .
+
+# Делаем так, чтобы python искал пакеты в /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+EXPOSE 8000
+CMD ["python", "main.py"]
