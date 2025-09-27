@@ -1,1 +1,118 @@
+# Quality Gates Configuration
+version: "1.2.0"
+effective_date: "2024-01-15"
 
+# Общие настройки Quality Gates
+global:
+  strict_mode: false  # Если true - пайплайн падает при нарушении quality gates
+  report_format: "html"  # html, json, xml
+
+# Критерии для всех проектов
+mandatory_gates:
+  - name: "test_execution"
+    description: "Тесты должны быть выполнены"
+    enabled: true
+    failure_action: "block"  # block, warn, none
+    
+  - name: "security_scan"
+    description: "Security scanning должен быть выполнен"
+    enabled: true
+    failure_action: "block"
+    
+  - name: "build_success"
+    description: "Сборка должна быть успешной"
+    enabled: true
+    failure_action: "block"
+
+# Языко-специфичные quality gates
+language_specific:
+  java:
+    test_coverage:
+      minimum: 80
+      enabled: true
+      failure_action: "warn"
+    static_analysis:
+      tools: ["checkstyle", "spotbugs"]
+      enabled: true
+      failure_action: "warn"
+    code_duplication:
+      max_duplication: 5%  # Максимальный процент дублирования кода
+      enabled: false
+
+  python:
+    test_coverage:
+      minimum: 70
+      enabled: true
+      failure_action: "warn"
+    code_style:
+      tools: ["flake8", "black"]
+      enabled: true
+      failure_action: "warn"
+    complexity:
+      max_complexity: 10  # Максимальная цикломатическая сложность
+      enabled: false
+
+  javascript:
+    test_coverage:
+      minimum: 80
+      enabled: true
+      failure_action: "warn"
+    bundle_size:
+      max_size: "5MB"
+      enabled: true
+      failure_action: "warn"
+    lighthouse:
+      performance: 80
+      accessibility: 90
+      enabled: false
+
+  go:
+    test_coverage:
+      minimum: 85  # Go проекты обычно имеют высокое покрытие
+      enabled: true
+      failure_action: "warn"
+    cyclomatic_complexity:
+      max_complexity: 15
+      enabled: true
+      failure_action: "warn"
+
+# Настройки отчетов
+reporting:
+  test_coverage:
+    formats: ["html", "xml", "clover"]
+    upload_to: "artifacts"
+  security:
+    formats: ["sarif", "html"]
+    upload_to: "github_security"
+  performance:
+    enabled: false
+    budget_file: "performance-budget.json"
+
+# Эскалация нарушений
+escalation:
+  - condition: "test_coverage < 50%"
+    action: "notify_team_lead"
+  - condition: "critical_vulnerabilities > 0"
+    action: "block_deployment"
+  - condition: "build_time > 30min"
+    action: "notify_devops"
+
+# Исключения (проекты, которые не должны подчиняться правилам)
+exceptions:
+  projects:
+    - name: "legacy-system"
+      rules:
+        - test_coverage: false
+        - security_scan: false
+      reason: "Legacy system scheduled for decommission"
+    - name: "prototype-project"
+      rules:
+        - test_coverage: false
+        - code_style: false
+      reason: "Rapid prototyping, quality gates not applicable"
+      
+  file_patterns:
+    - pattern: "**/generated/**"
+      rules: ["code_style", "complexity"]
+    - pattern: "**/test/**"
+      rules: ["duplication"]
