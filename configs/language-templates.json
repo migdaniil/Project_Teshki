@@ -1,1 +1,149 @@
-
+{
+  "version": "1.0.0",
+  "last_updated": "2024-01-15",
+  "templates": {
+    "java": {
+      "display_name": "Java",
+      "versions": ["11", "17", "21"],
+      "build_tools": {
+        "maven": {
+          "install": "mvn clean compile",
+          "test": "mvn test",
+          "package": "mvn package -DskipTests",
+          "lint": "mvn checkstyle:check",
+          "security_scan": "mvn org.owasp:dependency-check-maven:check",
+          "coverage": "mvn jacoco:report"
+        },
+        "gradle": {
+          "install": "./gradlew compileJava",
+          "test": "./gradlew test",
+          "package": "./gradlew build -x test",
+          "lint": "./gradlew checkstyleMain",
+          "security_scan": "./gradlew dependencyCheckAnalyze",
+          "coverage": "./gradlew jacocoTestReport"
+        }
+      },
+      "default_paths": {
+        "source": "src/main/java",
+        "tests": "src/test/java",
+        "resources": "src/main/resources",
+        "output": "target/"
+      },
+      "health_checks": {
+        "endpoint": "/actuator/health",
+        "timeout": "30s",
+        "interval": "10s"
+      }
+    },
+    
+    "python": {
+      "display_name": "Python",
+      "versions": ["3.9", "3.10", "3.11", "3.12"],
+      "build_tools": {
+        "pip": {
+          "install": "pip install -r requirements.txt",
+          "test": "pytest tests/ -v --cov=src --cov-report=xml",
+          "package": "python setup.py sdist",
+          "lint": "flake8 src/ --max-line-length=120",
+          "format": "black --check src/ tests/",
+          "security_scan": "safety check --json"
+        },
+        "poetry": {
+          "install": "poetry install --no-root",
+          "test": "poetry run pytest tests/ -v",
+          "package": "poetry build",
+          "lint": "poetry run flake8 src/",
+          "security_scan": "poetry run safety check"
+        }
+      },
+      "default_paths": {
+        "source": "src",
+        "tests": "tests",
+        "output": "dist/"
+      },
+      "environment": {
+        "venv_dir": "venv",
+        "requirement_files": ["requirements.txt", "requirements-dev.txt"]
+      }
+    },
+    
+    "javascript": {
+      "display_name": "JavaScript/TypeScript",
+      "versions": ["16", "18", "20"],
+      "build_tools": {
+        "npm": {
+          "install": "npm ci",
+          "test": "npm test",
+          "package": "npm run build",
+          "lint": "npm run lint",
+          "type_check": "npm run type-check",
+          "security_scan": "npm audit --audit-level=moderate"
+        },
+        "yarn": {
+          "install": "yarn install --frozen-lockfile",
+          "test": "yarn test",
+          "package": "yarn build",
+          "lint": "yarn lint",
+          "security_scan": "yarn audit"
+        }
+      },
+      "default_paths": {
+        "source": "src",
+        "tests": "test",
+        "output": "dist/"
+      },
+      "frameworks": {
+        "react": {
+          "test": "npm test -- --coverage --watchAll=false",
+          "package": "npm run build",
+          "lint": "npm run lint"
+        },
+        "angular": {
+          "test": "ng test --no-watch --code-coverage",
+          "package": "ng build --configuration=production",
+          "lint": "ng lint"
+        },
+        "node": {
+          "test": "npm test -- --coverage",
+          "package": "npm run build"
+        }
+      }
+    },
+    
+    "go": {
+      "display_name": "Go",
+      "versions": ["1.19", "1.20", "1.21"],
+      "build_tools": {
+        "go": {
+          "install": "go mod download",
+          "test": "go test ./... -v -race -coverprofile=coverage.out",
+          "package": "go build -o bin/app ./cmd/main",
+          "lint": "golangci-lint run ./...",
+          "security_scan": "gosec ./...",
+          "coverage": "go tool cover -html=coverage.out -o coverage.html"
+        }
+      },
+      "default_paths": {
+        "source": ".",
+        "tests": ".",
+        "output": "bin/"
+      },
+      "modules": {
+        "enabled": true,
+        "proxy": "https://proxy.golang.org"
+      }
+    }
+  },
+  
+  "docker": {
+    "base_images": {
+      "java": "eclipse-temurin:{version}-jre",
+      "python": "python:{version}-slim",
+      "javascript": "node:{version}-alpine",
+      "go": "golang:{version}-alpine"
+    },
+    "multi_stage": true,
+    "non_root_user": true,
+    "healthcheck": true
+  }
+}
